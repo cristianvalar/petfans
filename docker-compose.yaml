@@ -1,0 +1,27 @@
+services:
+  db:
+    image: postgres:17.5
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    ports:
+      - 5432:5432
+  web:
+    build: .
+    command: |
+      bash -c "
+      python manage.py makemigrations --settings=petfans.settings.local &&
+      python manage.py migrate --settings=petfans.settings.local &&
+      python manage.py runserver 0.0.0.0:8020 --settings=petfans.settings.local
+      "
+    volumes:
+      - .:/code
+    ports:
+      - 8020:8020
+    depends_on:
+      - db
+volumes:
+  db_data:
