@@ -10,8 +10,8 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 import random
 import string
-from .models import LoginCode, Species, Breed, Pet, UserProfile, PetVaccine
-from .serializers import SpeciesSerializer, BreedSerializer, PetSerializer, UserProfileSerializer, PetVaccineSerializer
+from .models import LoginCode, Species, Breed, Pet, UserProfile, PetVaccine, VaccineReminder
+from .serializers import SpeciesSerializer, BreedSerializer, PetSerializer, UserProfileSerializer, PetVaccineSerializer, VaccineReminderSerializer
 from datetime import timedelta
 
 
@@ -38,6 +38,42 @@ class PetViewSet(viewsets.ModelViewSet):
 class PetVaccineViewSet(viewsets.ModelViewSet):
     queryset = PetVaccine.objects.all()
     serializer_class = PetVaccineSerializer
+
+
+class VaccineReminderViewSet(viewsets.ModelViewSet):
+    queryset = VaccineReminder.objects.all()
+    serializer_class = VaccineReminderSerializer
+    
+    def get_queryset(self):
+        """Filtrar recordatorios por usuario autenticado"""
+        queryset = super().get_queryset()
+        
+        # Filtrar por usuario si está autenticado
+        if self.request.user.is_authenticated:
+            queryset = queryset.filter(user=self.request.user)
+        
+        # Filtrar por parámetros de consulta
+        pet_id = self.request.query_params.get('pet_id')
+        if pet_id:
+            queryset = queryset.filter(pet_vaccine__pet__id=pet_id)
+        
+        is_active = self.request.query_params.get('is_active')
+        if is_active is not None:
+            queryset = queryset.filter(is_active=is_active.lower() == 'true')
+        
+        is_due = self.request.query_params.get('is_due')
+        if is_due is not None and is_due.lower() == 'true':
+            queryset = queryset.filter(
+                reminder_date__lte=timezone.now(),
+                is_sent=False,
+                is_active=True
+            )
+        
+        return queryset
+    
+    def perform_create(self, serializer):
+        """Asignar usuario autenticado al crear recordatorio"""
+        serializer.save(user=self.request.user)
 
 
 class RequestLoginCode(APIView):

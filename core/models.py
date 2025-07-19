@@ -103,6 +103,16 @@ class PetVaccine(models.Model):
         self.status = 'applied'
         self.applied_date = applied_date or timezone.now().date()
         self.save()
+    
+    def save(self, *args, **kwargs):
+        """Override save para crear recordatorios automáticamente"""
+        is_new = self.pk is None
+        super().save(*args, **kwargs)
+        
+        # Crear recordatorios automáticos si hay fecha de próxima dosis
+        if self.next_dose_date and self.status in ['pending', 'scheduled']:
+            # Importar aquí para evitar importación circular
+            VaccineReminder.create_automatic_reminders(self)
 
 
 class LoginCode(models.Model):
@@ -130,3 +140,95 @@ class UserProfile(models.Model):
 
     def __str__(self):
         return self.full_name or self.user.username
+
+
+class VaccineReminder(models.Model):
+    REMINDER_TYPE_CHOICES = [
+        ('upcoming', 'Próxima vacuna'),
+        ('overdue', 'Vacuna vencida'),
+        ('scheduled', 'Vacuna programada'),
+    ]
+    
+    NOTIFICATION_METHOD_CHOICES = [
+        ('email', 'Correo electrónico'),
+        ('push', 'Notificación push'),
+        ('sms', 'SMS'),
+    ]
+    
+    pet_vaccine = models.ForeignKey(PetVaccine, on_delete=models.CASCADE, related_name='reminders')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='vaccine_reminders')
+    reminder_type = models.CharField(max_length=20, choices=REMINDER_TYPE_CHOICES, verbose_name='Tipo de recordatorio')
+    reminder_date = models.DateTimeField(verbose_name='Fecha del recordatorio')
+    notification_method = models.CharField(max_length=10, choices=NOTIFICATION_METHOD_CHOICES, default='email', verbose_name='Método de notificación')
+    days_before = models.IntegerField(default=7, verbose_name='Días de anticipación')
+    is_sent = models.BooleanField(default=False, verbose_name='Enviado')
+    sent_at = models.DateTimeField(null=True, blank=True, verbose_name='Fecha de envío')
+    is_active = models.BooleanField(default=True, verbose_name='Activo')
+    message = models.TextField(blank=True, null=True, verbose_name='Mensaje personalizado')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Recordatorio de Vacuna"
+        verbose_name_plural = "Recordatorios de Vacunas"
+        ordering = ['reminder_date', '-created_at']
+        unique_together = ['pet_vaccine', 'user', 'reminder_type', 'days_before']
+
+    def __str__(self):
+        vaccine_name = self.pet_vaccine.vaccine_name
+        pet_name = self.pet_vaccine.pet.name
+        reminder_type_display = self.get_reminder_type_display()
+        return f"{reminder_type_display}: {vaccine_name} para {pet_name} - {self.reminder_date.strftime('%d/%m/%Y')}"
+    
+    @property
+    def is_due(self):
+        """Verifica si el recordatorio debe ser enviado"""
+        return timezone.now() >= self.reminder_date and not self.is_sent and self.is_active
+    
+    def mark_as_sent(self):
+        """Marca el recordatorio como enviado"""
+        self.is_sent = True
+        self.sent_at = timezone.now()
+        self.save()
+    
+    def calculate_reminder_date(self):
+        """Calcula la fecha del recordatorio basado en la próxima dosis"""
+        if self.pet_vaccine.next_dose_date:
+            reminder_date = self.pet_vaccine.next_dose_date - timedelta(days=self.days_before)
+            # Convertir a datetime para almacenar en reminder_date
+            self.reminder_date = timezone.make_aware(
+                timezone.datetime.combine(reminder_date, timezone.datetime.min.time())
+            )
+            self.save()
+    
+    @classmethod
+    def create_automatic_reminders(cls, pet_vaccine):
+        """Crea recordatorios automáticos para una vacuna"""
+        if not pet_vaccine.next_dose_date:
+            return
+        
+        # Crear recordatorios para todos los dueños de la mascota
+        for owner in pet_vaccine.pet.owners.all():
+            # Recordatorio 7 días antes
+            cls.objects.get_or_create(
+                pet_vaccine=pet_vaccine,
+                user=owner,
+                reminder_type='upcoming',
+                days_before=7,
+                defaults={
+                    'notification_method': 'email',
+                    'message': f"Recordatorio: {pet_vaccine.vaccine_name} para {pet_vaccine.pet.name} vence pronto."
+                }
+            )
+            
+            # Recordatorio 1 día antes
+            cls.objects.get_or_create(
+                pet_vaccine=pet_vaccine,
+                user=owner,
+                reminder_type='upcoming',
+                days_before=1,
+                defaults={
+                    'notification_method': 'email',
+                    'message': f"¡Urgente! {pet_vaccine.vaccine_name} para {pet_vaccine.pet.name} vence mañana."
+                }
+            )

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Pet, PetVaccine, LoginCode, Species, Breed, UserProfile
+from .models import Pet, PetVaccine, VaccineReminder, LoginCode, Species, Breed, UserProfile
 
 
 @admin.register(Species)
@@ -47,3 +47,31 @@ class UserProfileAdmin(admin.ModelAdmin):
     list_display = ('user', 'full_name', 'phone_number')
     search_fields = ('user__username', 'full_name', 'phone_number')
     list_filter = ('user__is_active',)
+
+
+@admin.register(VaccineReminder)
+class VaccineReminderAdmin(admin.ModelAdmin):
+    list_display = ('pet_vaccine', 'user', 'reminder_type', 'reminder_date', 'is_sent', 'is_active', 'days_before')
+    list_filter = ('reminder_type', 'notification_method', 'is_sent', 'is_active', 'created_at')
+    search_fields = ('pet_vaccine__vaccine_name', 'pet_vaccine__pet__name', 'user__email', 'user__username')
+    date_hierarchy = 'reminder_date'
+    readonly_fields = ('is_sent', 'sent_at', 'created_at', 'updated_at')
+    
+    fieldsets = (
+        ('Información Principal', {
+            'fields': ('pet_vaccine', 'user', 'reminder_type', 'notification_method')
+        }),
+        ('Configuración del Recordatorio', {
+            'fields': ('reminder_date', 'days_before', 'message')
+        }),
+        ('Estado', {
+            'fields': ('is_active', 'is_sent', 'sent_at')
+        }),
+        ('Fechas', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        })
+    )
+    
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('pet_vaccine', 'user', 'pet_vaccine__pet')
