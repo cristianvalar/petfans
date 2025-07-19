@@ -210,24 +210,36 @@ class VaccineReminder(models.Model):
         # Crear recordatorios para todos los dueños de la mascota
         for owner in pet_vaccine.pet.owners.all():
             # Recordatorio 7 días antes
-            cls.objects.get_or_create(
+            reminder_date_7 = pet_vaccine.next_dose_date - timedelta(days=7)
+            reminder_datetime_7 = timezone.make_aware(
+                timezone.datetime.combine(reminder_date_7, timezone.datetime.min.time())
+            )
+            
+            reminder_7, created = cls.objects.get_or_create(
                 pet_vaccine=pet_vaccine,
                 user=owner,
                 reminder_type='upcoming',
                 days_before=7,
                 defaults={
+                    'reminder_date': reminder_datetime_7,
                     'notification_method': 'email',
                     'message': f"Recordatorio: {pet_vaccine.vaccine_name} para {pet_vaccine.pet.name} vence pronto."
                 }
             )
             
             # Recordatorio 1 día antes
-            cls.objects.get_or_create(
+            reminder_date_1 = pet_vaccine.next_dose_date - timedelta(days=1)
+            reminder_datetime_1 = timezone.make_aware(
+                timezone.datetime.combine(reminder_date_1, timezone.datetime.min.time())
+            )
+            
+            reminder_1, created = cls.objects.get_or_create(
                 pet_vaccine=pet_vaccine,
                 user=owner,
                 reminder_type='upcoming',
                 days_before=1,
                 defaults={
+                    'reminder_date': reminder_datetime_1,
                     'notification_method': 'email',
                     'message': f"¡Urgente! {pet_vaccine.vaccine_name} para {pet_vaccine.pet.name} vence mañana."
                 }
