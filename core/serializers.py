@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Species, Breed, Pet, UserProfile, Vaccine, LoginCode
+from .models import Species, Breed, Pet, UserProfile, PetVaccine, LoginCode
 from django.contrib.auth.models import User
 
 
@@ -22,12 +22,18 @@ class BreedSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'species', 'species_id']
 
 
-class VaccineSerializer(serializers.ModelSerializer):
+class PetVaccineSerializer(serializers.ModelSerializer):
     pet_name = serializers.CharField(source='pet.name', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    is_overdue = serializers.ReadOnlyField()
 
     class Meta:
-        model = Vaccine
-        fields = ['id', 'pet', 'pet_name', 'name', 'applied_date', 'next_dose', 'created_at']
+        model = PetVaccine
+        fields = [
+            'id', 'pet', 'pet_name', 'vaccine_name', 'status', 'status_display', 
+            'applied_date', 'next_dose_date', 'veterinarian', 'notes', 
+            'is_overdue', 'created_at', 'updated_at'
+        ]
 
 
 class BasicUserSerializer(serializers.ModelSerializer):
@@ -52,7 +58,7 @@ class PetSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True 
     )
-    vaccines = VaccineSerializer(many=True, read_only=True)
+    vaccines = PetVaccineSerializer(many=True, read_only=True)
     owners = BasicUserSerializer(many=True, read_only=True)
     owners_id = serializers.PrimaryKeyRelatedField(
         queryset=User.objects.all(),

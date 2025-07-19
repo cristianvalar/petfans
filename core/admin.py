@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Pet, Vaccine, LoginCode, Species, Breed, UserProfile
+from .models import Pet, PetVaccine, LoginCode, Species, Breed, UserProfile
 
 
 @admin.register(Species)
@@ -27,11 +27,12 @@ class PetAdmin(admin.ModelAdmin):
     get_owners.short_description = 'Owners'
 
 
-@admin.register(Vaccine)
-class VaccineAdmin(admin.ModelAdmin):
-    list_display = ('name', 'pet', 'applied_date', 'next_dose')
-    search_fields = ('name', 'pet__name')
-    list_filter = ('applied_date',)
+@admin.register(PetVaccine)
+class PetVaccineAdmin(admin.ModelAdmin):
+    list_display = ('vaccine_name', 'pet', 'status', 'applied_date', 'next_dose_date', 'veterinarian')
+    search_fields = ('vaccine_name', 'pet__name', 'veterinarian')
+    list_filter = ('status', 'applied_date', 'next_dose_date')
+    fields = ('pet', 'vaccine_name', 'status', 'applied_date', 'next_dose_date', 'veterinarian', 'notes')
 
 
 @admin.register(LoginCode)

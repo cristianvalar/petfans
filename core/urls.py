@@ -2,7 +2,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
     RequestLoginCode, VerifyLoginCode,
-    SpeciesViewSet, BreedViewSet, PetViewSet, VaccineViewSet,
+    SpeciesViewSet, BreedViewSet, PetViewSet, PetVaccineViewSet,
     UserProfileView
 )
 
@@ -10,7 +10,7 @@ router = DefaultRouter()
 router.register(r'species', SpeciesViewSet)
 router.register(r'breeds', BreedViewSet)
 router.register(r'pets', PetViewSet)
-router.register(r'vaccines', VaccineViewSet)
+router.register(r'vaccines', PetVaccineViewSet)
 
 urlpatterns = [
     path('auth/request-code/', RequestLoginCode.as_view(), name='auth-request'),

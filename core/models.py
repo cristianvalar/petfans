@@ -63,19 +63,46 @@ class Pet(models.Model):
     
 
 
-class Vaccine(models.Model):
+class PetVaccine(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pendiente'),
+        ('applied', 'Aplicada'),
+        ('overdue', 'Vencida'),
+        ('scheduled', 'Programada'),
+    ]
+    
     pet = models.ForeignKey(Pet, on_delete=models.CASCADE, related_name='vaccines')
-    name = models.CharField(max_length=255)
-    applied_date = models.DateField()
-    next_dose = models.DateField(blank=True, null=True)
+    vaccine_name = models.CharField(max_length=255, verbose_name='Nombre de la vacuna')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', verbose_name='Estado')
+    applied_date = models.DateField(null=True, blank=True, verbose_name='Fecha de aplicación')
+    next_dose_date = models.DateField(null=True, blank=True, verbose_name='Próxima dosis')
+    veterinarian = models.CharField(max_length=255, blank=True, null=True, verbose_name='Veterinario')
+    notes = models.TextField(blank=True, null=True, verbose_name='Notas adicionales')
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = "Vaccine"
-        verbose_name_plural = "Vaccines"
+        verbose_name = "Vacuna de Mascota"
+        verbose_name_plural = "Vacunas de Mascotas"
+        ordering = ['-applied_date', '-created_at']
 
     def __str__(self):
-        return f"{self.name} - {self.pet.name} ({self.applied_date})"
+        status_display = self.get_status_display()
+        date_str = self.applied_date.strftime('%d/%m/%Y') if self.applied_date else 'Sin fecha'
+        return f"{self.vaccine_name} - {self.pet.name} ({status_display}) - {date_str}"
+    
+    @property
+    def is_overdue(self):
+        """Verifica si la vacuna está vencida"""
+        if self.next_dose_date and self.status in ['pending', 'scheduled']:
+            return timezone.now().date() > self.next_dose_date
+        return False
+    
+    def mark_as_applied(self, applied_date=None):
+        """Marca la vacuna como aplicada"""
+        self.status = 'applied'
+        self.applied_date = applied_date or timezone.now().date()
+        self.save()
 
 
 class LoginCode(models.Model):

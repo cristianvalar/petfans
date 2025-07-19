@@ -10,8 +10,8 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 import random
 import string
-from .models import LoginCode, Species, Breed, Pet, UserProfile, Vaccine
-from .serializers import SpeciesSerializer, BreedSerializer, PetSerializer, UserProfileSerializer, VaccineSerializer
+from .models import LoginCode, Species, Breed, Pet, UserProfile, PetVaccine
+from .serializers import SpeciesSerializer, BreedSerializer, PetSerializer, UserProfileSerializer, PetVaccineSerializer
 from datetime import timedelta
 
 
@@ -35,9 +35,9 @@ class PetViewSet(viewsets.ModelViewSet):
         return context
 
 
-class VaccineViewSet(viewsets.ModelViewSet):
-    queryset = Vaccine.objects.all()
-    serializer_class = VaccineSerializer
+class PetVaccineViewSet(viewsets.ModelViewSet):
+    queryset = PetVaccine.objects.all()
+    serializer_class = PetVaccineSerializer
 
 
 class RequestLoginCode(APIView):
