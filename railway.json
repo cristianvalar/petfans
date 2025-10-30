@@ -4,7 +4,7 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "gunicorn petfans.wsgi:application --bind 0.0.0.0:${PORT:-8000}",
+    "startCommand": "gunicorn petfans.wsgi:application",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
   }
