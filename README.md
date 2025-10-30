@@ -110,10 +110,31 @@ petfans/
 │   │   └── prod.py     # Configuración de producción
 ├── media/               # Archivos multimedia
 ├── .env                 # Variables de entorno (NO COMMITEAR)
+├── .env.example         # Ejemplo de variables de entorno
 ├── .gitignore           # Archivos ignorados por Git
 ├── docker-compose.yaml  # Configuración de Docker
-└── requirements.txt     # Dependencias de Python
+├── Procfile             # Configuración para Railway
+├── railway.json         # Configuración Railway
+├── requirements.txt     # Dependencias de Python
+├── FEATURES.md          # Estado de funcionalidades
+└── RAILWAY_DEPLOY.md    # Guía de deploy paso a paso
 ```
+
+## 🚀 Deploy en Producción
+
+Este proyecto está listo para deploy en Railway.app. Ver guía completa en:
+
+📖 **[RAILWAY_DEPLOY.md](RAILWAY_DEPLOY.md)** - Guía paso a paso completa
+
+### Deploy rápido:
+
+1. Push a GitHub
+2. Conectar repo en Railway.app
+3. Agregar PostgreSQL
+4. Configurar variables de entorno
+5. Deploy automático ✨
+
+Tiempo estimado: **5-10 minutos**
 
 ## Contribución
 
@@ -123,3 +144,11 @@ petfans/
 4. Realiza tus cambios y commitea: `git commit -m 'Agregar nueva funcionalidad'`
 5. Push a la rama: `git push origin feature/nueva-funcionalidad`
 6. Abre un Pull Request
+
+## 📚 Documentación Adicional
+
+- **[FEATURES.md](FEATURES.md)** - Estado completo de funcionalidades
+- **[DEPLOY_CHECKLIST.md](DEPLOY_CHECKLIST.md)** - Checklist técnico de deploy
+- **[RAILWAY_DEPLOY.md](RAILWAY_DEPLOY.md)** - Guía de deploy en Railway
+- **[.github/copilot-instructions.md](.github/copilot-instructions.md)** - Guía para desarrolladores
+
