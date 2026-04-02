@@ -14,6 +14,8 @@ COPY . /code/
 # Collect static files at build time using a placeholder key
 RUN SECRET_KEY=build-placeholder python manage.py collectstatic --noinput --settings=petfans.settings.prod
 
+RUN chmod +x /code/entrypoint.sh
+
 EXPOSE 8000
 
-CMD gunicorn petfans.wsgi:application --bind 0.0.0.0:${PORT:-8000}
+CMD ["/code/entrypoint.sh"]
