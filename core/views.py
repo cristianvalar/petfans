@@ -1,6 +1,6 @@
-from django.core.mail import EmailMultiAlternatives
 from django.conf import settings
 from django.shortcuts import render
+import resend
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
@@ -311,25 +311,8 @@ class RequestLoginCode(APIView):
         # Save the code in the database
         LoginCode.objects.create(email=email, code=code)
 
-        # Send the code by email
+        # Send the code by email via Resend API
         try:
-            # Texto plano como fallback
-            text_content = f'''
-Hola,
-
-Has solicitado acceder a Petfans. Utiliza el siguiente código para iniciar sesión:
-
-Código: {code}
-
-Este código es válido por 10 minutos.
-
-Si no solicitaste este código, puedes ignorar este mensaje.
-
-Saludos,
-El equipo de Petfans 🐾
-            '''.strip()
-
-            # HTML con diseño profesional
             html_content = f'''
 <!DOCTYPE html>
 <html lang="es">
@@ -405,15 +388,13 @@ El equipo de Petfans 🐾
 </html>
             '''.strip()
 
-            # Crear el mensaje con alternativas
-            msg = EmailMultiAlternatives(
-                subject='Tu código de acceso a Petfans 🐾',
-                body=text_content,
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                to=[email]
-            )
-            msg.attach_alternative(html_content, "text/html")
-            msg.send(fail_silently=False)
+            resend.api_key = settings.RESEND_API_KEY
+            resend.Emails.send({
+                'from': settings.DEFAULT_FROM_EMAIL,
+                'to': [email],
+                'subject': 'Tu código de acceso a Petfans',
+                'html': html_content,
+            })
             
         except Exception as e:
             return Response({'error': 'No se pudo enviar el correo', 'details': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
