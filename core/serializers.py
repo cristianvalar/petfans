@@ -88,15 +88,6 @@ class PetSerializer(serializers.ModelSerializer):
     )
     vaccines = PetVaccineSerializer(many=True, read_only=True)
     care_team = PetCollaboratorSerializer(source='user_relationships', many=True, read_only=True)
-    
-    # Mantenemos owners_id para la creación/edición técnica si es necesario
-    owners_id = serializers.PrimaryKeyRelatedField(
-        queryset=User.objects.all(),
-        source='owners',
-        many=True,
-        write_only=True,
-        required=False
-    )
 
     image_url = serializers.SerializerMethodField()
     user_role = serializers.SerializerMethodField()
@@ -107,7 +98,7 @@ class PetSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'species', 'species_id', 'breed', 'breed_id', 'sex',
             'birth_date', 'description', 'photo', 'image_url', 'chip_number', 'is_sterilized',
-            'current_age', 'care_team', 'owners_id', 'user_role', 'last_weight', 'is_active', 'created_at', 'updated_at', 'vaccines'
+            'current_age', 'care_team', 'user_role', 'last_weight', 'is_active', 'created_at', 'updated_at', 'vaccines'
         ]
         read_only_fields = ['is_active', 'created_at', 'updated_at']
 
@@ -124,6 +115,11 @@ class PetSerializer(serializers.ModelSerializer):
             if relationship:
                 return relationship.role
         return None
+
+    def update(self, instance, validated_data):
+        """Prevent owners M2M from being modified through the main pet update endpoint."""
+        validated_data.pop('owners', None)
+        return super().update(instance, validated_data)
 
     def get_last_weight(self, obj):
         last_weight = obj.weights.first()

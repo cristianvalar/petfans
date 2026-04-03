@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.core.exceptions import ValidationError
 from .models import Pet, PetVaccine, VaccineReminder, LoginCode, Species, Breed, UserProfile, PetUser, PetWeight
 
 
@@ -34,6 +35,13 @@ class PetAdmin(admin.ModelAdmin):
     fields = ('name', 'species', 'breed', 'sex', 'birth_date', 'description', 'photo', 'is_active')
     inlines = [PetUserInline, PetWeightInline]
     
+    def save_related(self, request, form, formsets, change):
+        """Ensure at least one PetUser with role 'owner' exists after saving inlines."""
+        super().save_related(request, form, formsets, change)
+        pet = form.instance
+        if not pet.user_relationships.filter(role='owner').exists():
+            raise ValidationError("La mascota debe tener al menos un dueño (owner). Agrega un usuario con rol 'owner' en la sección de relaciones.")
+
     def get_owners(self, obj):
         return ", ".join([rel.user.username for rel in obj.user_relationships.all()[:3]])
     get_owners.short_description = 'Owners'

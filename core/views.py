@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.shortcuts import render
+from django.db import transaction
 import resend
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
@@ -57,13 +58,14 @@ class PetViewSet(viewsets.ModelViewSet):
             total_pets_count = PetUser.objects.filter(user=user, pet__is_active=True).count()
             if total_pets_count >= 1:
                 raise PermissionDenied("Los usuarios Fan solo pueden tener 1 mascota. ¡Hazte Súper Fan para mascotas ilimitadas!")
-        
-        pet = serializer.save()
-        PetUser.objects.get_or_create(
-            pet=pet,
-            user=self.request.user,
-            defaults={'role': 'owner'}
-        )
+
+        with transaction.atomic():
+            pet = serializer.save()
+            PetUser.objects.get_or_create(
+                pet=pet,
+                user=self.request.user,
+                defaults={'role': 'owner'}
+            )
 
     def destroy(self, request, *args, **kwargs):
         """Borrado lógico (Soft Delete)"""
