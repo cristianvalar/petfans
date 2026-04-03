@@ -20,6 +20,8 @@ DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '.railway.app').split(',')
 
+CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in os.environ.get('CSRF_TRUSTED_ORIGINS', 'https://*.railway.app').split(',') if origin.strip()]
+
 # Database - Soporta DATABASE_URL o variables individuales
 if 'DATABASE_URL' in os.environ:
     DATABASES = {
