@@ -10,6 +10,8 @@ python-dotenv==1.1.0
 sqlparse==0.5.3
 
 resend==2.10.0
+cloudinary
+django-cloudinary-storage
 
 # Dependencias de producción
 gunicorn==21.2.0

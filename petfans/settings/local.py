@@ -42,3 +42,7 @@ except ImportError:
 # Configuración para desarrollo
 CORS_ALLOW_ALL_ORIGINS = os.environ.get('CORS_ALLOW_ALL_ORIGINS', 'True').lower() == 'true'
 CORS_ALLOWED_ORIGINS = os.environ.get('CORS_ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:3002,http://localhost:3003').split(',')
+
+# Storage local en desarrollo (sin Cloudinary)
+DEFAULT_FILE_STORAGE = 'django.core.files.storage.FileSystemStorage'
+MEDIA_ROOT = BASE_DIR / 'media'
