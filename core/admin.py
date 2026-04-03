@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Pet, PetVaccine, VaccineReminder, LoginCode, Species, Breed, UserProfile
+from .models import Pet, PetVaccine, VaccineReminder, LoginCode, Species, Breed, UserProfile, PetUser, PetWeight
 
 
 @admin.register(Species)
@@ -15,16 +15,42 @@ class BreedAdmin(admin.ModelAdmin):
     list_filter = ('species',)
 
 
+class PetUserInline(admin.TabularInline):
+    model = PetUser
+    extra = 1
+
+
+class PetWeightInline(admin.TabularInline):
+    model = PetWeight
+    extra = 1
+    readonly_fields = ('created_at',)
+
+
 @admin.register(Pet)
 class PetAdmin(admin.ModelAdmin):
-    list_display = ('name', 'species', 'breed', 'sex', 'get_owners')
+    list_display = ('name', 'species', 'breed', 'sex', 'is_active', 'get_owners')
     search_fields = ('name', 'species__name', 'breed__name', 'sex', 'description')
-    list_filter = ('species', 'breed', 'sex')
-    fields = ('name', 'species', 'breed', 'sex', 'birth_date', 'description', 'photo', 'owners')
+    list_filter = ('species', 'breed', 'sex', 'is_active')
+    fields = ('name', 'species', 'breed', 'sex', 'birth_date', 'description', 'photo', 'is_active')
+    inlines = [PetUserInline, PetWeightInline]
     
     def get_owners(self, obj):
-        return ", ".join([owner.username for owner in obj.owners.all()[:3]])
+        return ", ".join([rel.user.username for rel in obj.user_relationships.all()[:3]])
     get_owners.short_description = 'Owners'
+
+
+@admin.register(PetUser)
+class PetUserAdmin(admin.ModelAdmin):
+    list_display = ('pet', 'user', 'role', 'created_at')
+    list_filter = ('role', 'created_at')
+    search_fields = ('pet__name', 'user__username', 'user__email')
+
+
+@admin.register(PetWeight)
+class PetWeightAdmin(admin.ModelAdmin):
+    list_display = ('pet', 'weight', 'date', 'created_at')
+    list_filter = ('date', 'created_at')
+    search_fields = ('pet__name',)
 
 
 @admin.register(PetVaccine)

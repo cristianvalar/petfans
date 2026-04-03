@@ -40,7 +40,8 @@ class Pet(models.Model):
     photo = models.ImageField(upload_to='pets/', blank=True, null=True)
     chip_number = models.CharField(max_length=20, blank=True, null=True, verbose_name='Número de chip')
     is_sterilized = models.BooleanField(null=True, blank=True, verbose_name='Esterilizado/a')
-    owners = models.ManyToManyField(User, related_name='pets')
+    owners = models.ManyToManyField(User, through='PetUser', related_name='pets')
+    is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -49,11 +50,7 @@ class Pet(models.Model):
         verbose_name_plural = "Pets"
 
     def __str__(self):
-        owners_str = ", ".join([owner.username for owner in self.owners.all()[:3]])
-        if self.owners.count() > 3:
-            owners_str += "..."
-        breed_str = f" - {self.breed.name}" if self.breed else ""
-        return f"{self.name} - {self.species.name}{breed_str} ({owners_str})"
+        return f"{self.name} - {self.species.name}"
 
     @property
     def current_age(self):
@@ -137,6 +134,8 @@ class UserProfile(models.Model):
     full_name = models.CharField(max_length=255)
     phone_number = models.CharField(max_length=20, blank=True, null=True)
     avatar = models.ImageField(upload_to='avatars/', blank=True, null=True)
+    is_premium = models.BooleanField(default=False)
+    country = models.CharField(max_length=100, default='Chile')
 
     def __str__(self):
         return self.full_name or self.user.username
@@ -244,3 +243,40 @@ class VaccineReminder(models.Model):
                     'message': f"¡Urgente! {pet_vaccine.vaccine_name} para {pet_vaccine.pet.name} vence mañana."
                 }
             )
+
+
+class PetUser(models.Model):
+    ROLE_CHOICES = [
+        ('owner', 'Dueño/a'),
+        ('editor', 'Editor/a'),
+        ('viewer', 'Visor/a'),
+    ]
+
+    pet = models.ForeignKey(Pet, on_delete=models.CASCADE, related_name='user_relationships')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='pet_relationships')
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='owner')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['pet', 'user']
+        verbose_name = "Relación Mascota-Usuario"
+        verbose_name_plural = "Relaciones Mascota-Usuario"
+
+    def __str__(self):
+        return f"{self.user.username} - {self.pet.name} ({self.get_role_display()})"
+
+
+class PetWeight(models.Model):
+    pet = models.ForeignKey(Pet, on_delete=models.CASCADE, related_name='weights')
+    weight = models.DecimalField(max_digits=5, decimal_places=2, verbose_name='Peso (kg)')
+    date = models.DateField(default=timezone.now, verbose_name='Fecha de registro')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Peso de Mascota"
+        verbose_name_plural = "Pesos de Mascotas"
+        ordering = ['-date', '-created_at']
+
+    def __str__(self):
+        return f"{self.pet.name} - {self.weight}kg ({self.date})"
