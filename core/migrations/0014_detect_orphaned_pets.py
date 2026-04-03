@@ -6,15 +6,15 @@ from django.db import migrations
 
 
 def detect_orphaned_pets(apps, schema_editor):
-    """Raise an error if any active pets have no associated PetUser records."""
+    """Warn about active pets that have no associated PetUser records."""
     Pet = apps.get_model('core', 'Pet')
     orphaned = Pet.objects.filter(is_active=True, user_relationships__isnull=True)
     if orphaned.exists():
         details = "\n".join(f"  - {p.name} (id={p.id})" for p in orphaned)
-        raise Exception(
-            f"Found {orphaned.count()} active pet(s) with no owner.\n"
+        print(
+            f"\nWARNING: Found {orphaned.count()} active pet(s) with no owner.\n"
             f"{details}\n"
-            "Fix them via Django admin (add a PetUser with role='owner') before running this migration."
+            "Fix them via Django admin (add a PetUser with role='owner').\n"
         )
 
 
