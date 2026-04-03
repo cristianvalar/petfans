@@ -1,18 +1,23 @@
 from django.core.mail import EmailMultiAlternatives
+from django.conf import settings
 from django.shortcuts import render
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.models import User
 from django.utils import timezone
 import random
 import string
-from .models import LoginCode, Species, Breed, Pet, UserProfile, PetVaccine, VaccineReminder
-from .serializers import SpeciesSerializer, BreedSerializer, PetSerializer, UserProfileSerializer, PetVaccineSerializer, VaccineReminderSerializer
+from .models import LoginCode, Species, Breed, Pet, UserProfile, PetVaccine, VaccineReminder, PetUser, PetWeight
+from .serializers import (
+    SpeciesSerializer, BreedSerializer, PetSerializer, UserProfileSerializer, 
+    PetVaccineSerializer, VaccineReminderSerializer, PetWeightSerializer
+)
 from datetime import timedelta
 
 
@@ -27,13 +32,163 @@ class BreedViewSet(viewsets.ModelViewSet):
 
 
 class PetViewSet(viewsets.ModelViewSet):
-    queryset = Pet.objects.all()
+    queryset = Pet.objects.filter(is_active=True)
     serializer_class = PetSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        """Filtrar mascotas activas donde el usuario tiene algún rol"""
+        return Pet.objects.filter(
+            is_active=True,
+            user_relationships__user=self.request.user
+        ).distinct()
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
         context.update({"request": self.request})
         return context
+
+    def perform_create(self, serializer):
+        """Al crear una mascota, el usuario actual se asigna como 'owner'"""
+        # Validación de Plan FREE (Fan)
+        user = self.request.user
+        if not user.profile.is_premium:
+            # Contar todas las mascotas activas del usuario (propias o por invitación)
+            total_pets_count = PetUser.objects.filter(user=user, pet__is_active=True).count()
+            if total_pets_count >= 1:
+                raise PermissionDenied("Los usuarios Fan solo pueden tener 1 mascota. ¡Hazte Súper Fan para mascotas ilimitadas!")
+        
+        pet = serializer.save()
+        PetUser.objects.get_or_create(
+            pet=pet,
+            user=self.request.user,
+            defaults={'role': 'owner'}
+        )
+
+    def destroy(self, request, *args, **kwargs):
+        """Borrado lógico (Soft Delete)"""
+        instance = self.get_object()
+        
+        # Opcional: Solo el owner puede "borrar"
+        relationship = instance.user_relationships.filter(user=request.user).first()
+        if not relationship or relationship.role != 'owner':
+            raise PermissionDenied("Solo el dueño puede eliminar esta mascota.")
+
+        instance.is_active = False
+        instance.save()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=['post'])
+    def invite(self, request, pk=None):
+        """Endpoint para invitar usuarios a una mascota"""
+        pet = self.get_object()
+        
+        # 1. Validar que quien invita es Owner
+        relationship = pet.user_relationships.filter(user=request.user).first()
+        if not relationship or relationship.role != 'owner':
+            return Response({"error": "Solo el dueño puede invitar colaboradores."}, status=status.HTTP_403_FORBIDDEN)
+            
+        # 2. Validar que quien invita es Súper Fan (Premium)
+        if not request.user.profile.is_premium:
+            return Response({"error": "Solo los Súper Fans pueden invitar amigos. ¡Actualiza tu plan!"}, status=status.HTTP_403_FORBIDDEN)
+            
+        email = request.data.get('email')
+        role = request.data.get('role', 'viewer')
+        
+        if not email:
+            return Response({"error": "El email es requerido."}, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            invited_user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({"error": "El usuario invitado no está registrado en PetFans."}, status=status.HTTP_404_NOT_FOUND)
+            
+        # 3. Si el invitado es Free, validar que no tenga ya una mascota (propia o compartida)
+        if not invited_user.profile.is_premium:
+            total_pets_count = PetUser.objects.filter(user=invited_user, pet__is_active=True).count()
+            if total_pets_count >= 1:
+                return Response({"error": "El usuario invitado ya tiene una mascota. Debe ser Súper Fan para tener más de una."}, status=status.HTTP_403_FORBIDDEN)
+            
+        # Crear la relación
+        PetUser.objects.get_or_create(
+            pet=pet,
+            user=invited_user,
+            defaults={'role': role}
+        )
+        
+        return Response({"message": f"Usuario {invited_user.username} agregado como {role}."}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['patch'], url_path='owners/(?P<user_id>[^/.]+)')
+    def update_role(self, request, pk=None, user_id=None):
+        """Endpoint para actualizar el rol de un colaborador"""
+        pet = self.get_object()
+        new_role = request.data.get('role')
+
+        if not new_role:
+            return Response({"error": "El campo 'role' es requerido."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if new_role not in ['owner', 'editor', 'viewer']:
+            return Response({"error": "Rol no válido."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 1. Validar que quien edita es Owner
+        current_user_rel = pet.user_relationships.filter(user=request.user).first()
+        if not current_user_rel or current_user_rel.role != 'owner':
+            return Response({"error": "Solo el dueño puede cambiar roles."}, status=status.HTTP_403_FORBIDDEN)
+
+        # 2. Buscar la relación a modificar
+        rel_to_update = pet.user_relationships.filter(user_id=user_id).first()
+        if not rel_to_update:
+            return Response({"error": "El usuario no es colaborador de esta mascota."}, status=status.HTTP_404_NOT_FOUND)
+
+        # 3. Validaciones de seguridad
+        # El dueño no puede degradarse a sí mismo si es el único dueño (opcional, pero recomendado)
+        if str(request.user.id) == str(user_id) and new_role != 'owner':
+            owners_count = pet.user_relationships.filter(role='owner').count()
+            if owners_count <= 1:
+                return Response({"error": "No puedes cambiar tu rol de dueño si eres el único dueño."}, status=status.HTTP_400_BAD_REQUEST)
+
+        rel_to_update.role = new_role
+        rel_to_update.save()
+
+        return Response({
+            "message": f"Rol actualizado a {rel_to_update.get_role_display()} correctamente.",
+            "role": new_role
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'])
+    def remove_user(self, request, pk=None):
+        """Endpoint para eliminar un usuario de la mascota (revocar acceso)"""
+        pet = self.get_object()
+        user_id_to_remove = request.data.get('user_id')
+        
+        if not user_id_to_remove:
+            return Response({"error": "El user_id es requerido."}, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Verificar permisos
+        current_user_rel = pet.user_relationships.filter(user=request.user).first()
+        if not current_user_rel:
+            return Response({"error": "No tienes acceso a esta mascota."}, status=status.HTTP_403_FORBIDDEN)
+            
+        # Caso 1: El usuario se elimina a sí mismo (Salir del grupo)
+        if str(request.user.id) == str(user_id_to_remove):
+            if current_user_rel.role == 'owner':
+                return Response({"error": "El dueño no puede abandonar la mascota. Debe eliminarla o transferir la propiedad (no implementado)."}, status=status.HTTP_400_BAD_REQUEST)
+            current_user_rel.delete()
+            return Response({"message": "Has dejado de colaborar en esta mascota."}, status=status.HTTP_200_OK)
+            
+        # Caso 2: El Owner elimina a otro usuario
+        if current_user_rel.role == 'owner':
+            rel_to_remove = pet.user_relationships.filter(user_id=user_id_to_remove).first()
+            if not rel_to_remove:
+                return Response({"error": "El usuario no tiene acceso a esta mascota."}, status=status.HTTP_404_NOT_FOUND)
+            
+            if rel_to_remove.role == 'owner':
+                return Response({"error": "No se puede eliminar al dueño principal."}, status=status.HTTP_400_BAD_REQUEST)
+                
+            rel_to_remove.delete()
+            return Response({"message": "Usuario eliminado correctamente."}, status=status.HTTP_200_OK)
+            
+        return Response({"error": "No tienes permiso para eliminar usuarios."}, status=status.HTTP_403_FORBIDDEN)
 
 
 class PetVaccineViewSet(viewsets.ModelViewSet):
@@ -56,11 +211,11 @@ class PetVaccineViewSet(viewsets.ModelViewSet):
         return queryset
     
     def perform_create(self, serializer):
-        """Validar que la mascota pertenece al usuario antes de crear la vacuna"""
+        """Validar que el usuario tiene rol para agregar vacunas"""
         pet = serializer.validated_data.get('pet')
         
-        # Verificar que el usuario es dueño de la mascota
-        if not pet.owners.filter(id=self.request.user.id).exists():
+        relationship = pet.user_relationships.filter(user=self.request.user).first()
+        if not relationship or relationship.role not in ['owner', 'editor']:
             raise PermissionDenied("No tienes permiso para agregar vacunas a esta mascota.")
         
         serializer.save()
@@ -100,6 +255,47 @@ class VaccineReminderViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """Asignar usuario autenticado al crear recordatorio"""
         serializer.save(user=self.request.user)
+
+
+class PetWeightViewSet(viewsets.ModelViewSet):
+    queryset = PetWeight.objects.all()
+    serializer_class = PetWeightSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        """Filtrar pesos por mascota y aplicar reglas de plan"""
+        queryset = super().get_queryset()
+        pet_id = self.request.query_params.get('pet')
+        
+        if not pet_id:
+            return queryset.none()
+            
+        # Verificar acceso a la mascota
+        pet = Pet.objects.filter(id=pet_id, user_relationships__user=self.request.user).first()
+        if not pet:
+            return queryset.none()
+            
+        queryset = queryset.filter(pet=pet)
+        
+        # Regla de Plan (Súper Fan vs Fan)
+        # Si NO es premium, solo mostramos el último registro
+        if not self.request.user.profile.is_premium:
+            latest = queryset.order_by('-date', '-created_at').first()
+            if latest:
+                return PetWeight.objects.filter(id=latest.id)
+            return queryset.none()
+            
+        return queryset
+
+    def perform_create(self, serializer):
+        """Validar permisos antes de guardar peso"""
+        pet = serializer.validated_data.get('pet')
+        relationship = pet.user_relationships.filter(user=self.request.user).first()
+        
+        if not relationship or relationship.role not in ['owner', 'editor']:
+            raise PermissionDenied("No tienes permiso para registrar pesos para esta mascota.")
+            
+        serializer.save()
 
 
 class RequestLoginCode(APIView):
@@ -213,7 +409,7 @@ El equipo de Petfans 🐾
             msg = EmailMultiAlternatives(
                 subject='Tu código de acceso a Petfans 🐾',
                 body=text_content,
-                from_email='hola@petfans.app',
+                from_email=settings.DEFAULT_FROM_EMAIL,
                 to=[email]
             )
             msg.attach_alternative(html_content, "text/html")
